@@ -406,6 +406,13 @@ void loop() {
   strcat(SONDA, GPS1);
   strcat(SONDA, GPS2);
 
+  // ADD CHECKSUM TO THE SONDA STRING
+  
+  unsigned int CHECKSUM = gps_CRC16_checksum(SONDA); // Function for calculating the checksum for the SONDA string (defined later)
+  char VERIFICACIO[6]; // Define VERIFICACIO as a string
+  sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); // Structure the VERIFICACIO string
+  strcat(SONDA, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
+
   // SAVE SONDA STRING TO THE SD CARD
 
   SondaSD = SD.open("sonda.txt", FILE_WRITE);
@@ -418,13 +425,6 @@ void loop() {
   else{
     Serial.println("error obrint sonda.txt");
   }
-
-  // ADD CHECKSUM TO THE SONDA STRING
-  
-  unsigned int CHECKSUM = gps_CRC16_checksum(SONDA); // Function for calculating the checksum for the SONDA string (defined later)
-  char VERIFICACIO[6]; // Define VERIFICACIO as a string
-  sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); // Structure the VERIFICACIO string
-  strcat(SONDA, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
 
   // TRANSMIT SONDA STRING BY RADIO
   
