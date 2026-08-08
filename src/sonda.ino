@@ -41,6 +41,35 @@
 #include <SD.h> // Library for using the SD card
 #include <SPI.h> // Library for communication with the SD card
 
+// DEFINITIONS
+// We use these flags to include/exclude certain parts of the code, for example sensor reading
+// or measurement output. If the flag value is 0 the corresponding part will not execute
+// By default all flags are 1 so everything executes.
+
+#ifndef USE_DS
+#define USE_DS 1
+#endif
+
+#ifndef USE_DHT
+#define USE_DHT 1
+#endif
+
+#ifndef USE_BMP
+#define USE_BMP 1
+#endif
+
+#ifndef USE_GPS
+#define USE_GPS 1
+#endif
+
+#ifndef USE_SD
+#define USE_SD 1
+#endif
+
+#ifndef USE_RADIO
+#define USE_RADIO 1
+#endif
+
 // SENSORS:
 
 //DS18B20:
@@ -83,14 +112,20 @@ File SondaSD; // "SondaSD" object for the SD card file where data will be saved
 // Sensor variables
 
 float tDS = 0; // External temperature (degrees Celsius)
+int tDSE = 0;  // External temperature (integer part)
+int tDSD = 0;  // External temperature (decimal part)
 
 float tDHT = 0; // Internal temperature from the DHT sensor (degrees Celsius)
+int tDHTE = 0;  // Internal temperature (integer part)
+int tDHTD = 0;  // Internal temperature (decimal part)
 int hDHT = 0; // Humidity (%)
+int hDHTE = 0;  // Humidity (integer part)
+int hDHTD = 0;  // Humidity (decimal part)
 
-int tBMP; // Internal temperature from the BMP sensor (degrees Celsius)
-int pBMP; // Pressure (mbar)
-int p0; // Pressure (relative, at sea level)
-int altBMP; // Altitude (calculated by the BMP sensor)
+int tBMP = 0; // Internal temperature from the BMP sensor (degrees Celsius)
+int pBMP = 0; // Pressure (mbar)
+int p0 = 0; // Pressure (relative, at sea level)
+int altBMP = 0; // Altitude (calculated by the BMP sensor)
 
 // GPS variables
 
@@ -125,42 +160,48 @@ void setup() {
   // Serial port communication is only used for pre-flight setup.
 
   Serial.begin(38400); // Open serial port communication
-  Serial.println(F("TEST SONDA"));
 
   // OPEN SD CARD COMMUNICATION
 
   // Prepare SD card communication
 
-  Serial.println(F("Preparant SD"));
-  pinMode(TARGETA,OUTPUT);
+  #if USE_SD
+    Serial.println(F("Preparant SD"));
+    pinMode(TARGETA,OUTPUT);
 
-  // Start SD card communication.
-  // If communication cannot be established now, data cannot be saved during the flight.
+    // Start SD card communication.
+    // If communication cannot be established now, data cannot be saved during the flight.
 
-  if(!SD.begin(10)){
-    Serial.println(F("ERROR SD")); 
-  }
-  else{
-  Serial.println(F("SD OK"));
-  }
+    if(!SD.begin(10)){
+        Serial.println(F("ERROR SD")); 
+    }
+    else{
+    Serial.println(F("SD OK"));
+    }
+   #endif
 
-  // PREPARE RADIO COMMUNICATION
+//   // PREPARE RADIO COMMUNICATION
 
-  pinMode(RADIOPIN,OUTPUT);
-  setPwmFrequency(RADIOPIN, 1);
-
+  #if USE_RADIO
+    pinMode(RADIOPIN,OUTPUT);
+    setPwmFrequency(RADIOPIN, 1);
+  #endif
   // START DHT22 SENSOR
 
-  dht.begin();
+  #if USE_DHT
+    dht.begin();
+  #endif
 
   // START BMP180 SENSOR
   
-  if (pressio.begin()) { // If the sensor starts,
-    Serial.println(F("BMP OK"));
-  }
-  else{ // If it does not start,
-    Serial.println(F("BMP ERROR"));
-  }
+  #if USE_BMP
+    if (pressio.begin()) { // If the sensor starts,
+        Serial.println(F("BMP OK"));
+    }
+    else{ // If it does not start,
+        Serial.println(F("BMP ERROR"));
+    }
+  #endif
 
 }
 
@@ -175,66 +216,68 @@ void loop() {
   // Taken from the "DS18x20_Temperature" example from the OneWire library.
   // This is not original code; it has been left intact.
 
-  byte i;
-  byte present = 0;
-  byte type_s;
-  byte data[12];
-  byte addr[8];
-  
-  if ( !ds.search(addr)) {
-    Serial.println("No more addresses.");
-    Serial.println();
-    ds.reset_search();
-    delay(250);
-    return;
-  }
-  
-  ds.reset();
-  ds.select(addr);
-  ds.write(0x44, 1);        // start conversion, with parasite power on at the end
-  
-  delay(1000);     // maybe 750ms is enough, maybe not
-  // we might do a ds.depower() here, but the reset will take care of it.
-  
-  present = ds.reset();
-  ds.select(addr);    
-  ds.write(0xBE);         // Read Scratchpad
-
-  for ( i = 0; i < 9; i++) {           // we need 9 bytes
-    data[i] = ds.read();
-  }
-
-  // Convert the data to actual temperature
-  // because the result is a 16 bit signed integer, it should
-  // be stored to an "int16_t" type, which is always 16 bits
-  // even when compiled on a 32 bit processor.
-  int16_t raw = (data[1] << 8) | data[0];
-  if (type_s) {
-    raw = raw << 3; // 9 bit resolution default
-    if (data[7] == 0x10) {
-      // "count remain" gives full 12 bit resolution
-      raw = (raw & 0xFFF0) + 12 - data[6];
+  #if USE_DS
+    byte i;
+    byte present = 0;
+    byte type_s;
+    byte data[12];
+    byte addr[8];
+    
+    if ( !ds.search(addr)) {
+        Serial.println("No more addresses.");
+        Serial.println();
+        ds.reset_search();
+        delay(250);
+        return;
     }
-  } else {
-    byte cfg = (data[4] & 0x60);
-    // at lower res, the low bits are undefined, so let's zero them
-    if (cfg == 0x00) raw = raw & ~7;  // 9 bit resolution, 93.75 ms
-    else if (cfg == 0x20) raw = raw & ~3; // 10 bit res, 187.5 ms
-    else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
-    //// default is 12 bit resolution, 750 ms conversion time
-  }
-  tDS = (float)raw / 16.0;
+    
+    ds.reset();
+    ds.select(addr);
+    ds.write(0x44, 1);        // start conversion, with parasite power on at the end
+    
+    delay(1000);     // maybe 750ms is enough, maybe not
+    // we might do a ds.depower() here, but the reset will take care of it.
+    
+    present = ds.reset();
+    ds.select(addr);    
+    ds.write(0xBE);         // Read Scratchpad
 
-  // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
-  // It is approximated to one decimal by truncation.
-  // The tDS value is split into tDSE (integer part) and tDSD (decimal part)
+    for ( i = 0; i < 9; i++) {           // we need 9 bytes
+        data[i] = ds.read();
+    }
 
-  int tDSE = tDS;
-  float tDS2 = tDS - tDSE;
-  int tDSD = trunc(tDS2*10);
+    // Convert the data to actual temperature
+    // because the result is a 16 bit signed integer, it should
+    // be stored to an "int16_t" type, which is always 16 bits
+    // even when compiled on a 32 bit processor.
+    int16_t raw = (data[1] << 8) | data[0];
+    if (type_s) {
+        raw = raw << 3; // 9 bit resolution default
+        if (data[7] == 0x10) {
+        // "count remain" gives full 12 bit resolution
+        raw = (raw & 0xFFF0) + 12 - data[6];
+        }
+    } else {
+        byte cfg = (data[4] & 0x60);
+        // at lower res, the low bits are undefined, so let's zero them
+        if (cfg == 0x00) raw = raw & ~7;  // 9 bit resolution, 93.75 ms
+        else if (cfg == 0x20) raw = raw & ~3; // 10 bit res, 187.5 ms
+        else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
+        //// default is 12 bit resolution, 750 ms conversion time
+    }
+    tDS = (float)raw / 16.0;
+
+    // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
+    // It is approximated to one decimal by truncation.
+    // The tDS value is split into tDSE (integer part) and tDSD (decimal part)
+
+    tDSE = tDS;
+    float tDS2 = tDS - tDSE;
+    tDSD = trunc(tDS2*10);
+  #endif
 
   //DHT
-  
+  #if USE_DHT  
   // GET INTERNAL TEMPERATURE.
 
   tDHT = dht.readTemperature(); // Read internal temperature
@@ -255,119 +298,121 @@ void loop() {
   // It is approximated to one decimal by truncation.
   // The h value is split into hE (integer part) and hD (decimal part)
   
-  int hDHTE = hDHT;
+  hDHTE = hDHT;
   float hDHT2 = hDHT - hDHTE;
-  int hDHTD = trunc(hDHT2*10);
+  hDHTD = trunc(hDHT2*10);
+  #endif
 
   //BMP180
-  // This section is copied from the code
-  // in section 2 of appendix 1 (test 2. BMP180 pressure sensor)
+  #if USE_BMP
+    char status; // Define status variable (returns 1 if there are no problems, 0 if there are)
+    double T,P;
+    
+    // T: define variable T (temperature in degrees C)
+    // P: define variable P (absolute pressure in mbar)
 
-  char status; // Define status variable (returns 1 if there are no problems, 0 if there are)
-  double T,P;
-  
-  // T: define variable T (temperature in degrees C)
-  // P: define variable P (absolute pressure in mbar)
-
-  // Measure temperature.
-   
-  status = pressio.startTemperature();
-  if (status != 0) // If temperature can be measured...
-  {
-    // Wait until temperature measurement is complete
-    delay(status);
-
-    // Receive temperature measurement
-    // and save it to variable T
-
-    status = pressio.getTemperature(T);
-    if (status != 0) // If the measurement can be received...
+    // Measure temperature.
+    
+    status = pressio.startTemperature();
+    if (status != 0) // If temperature can be measured...
     {
-      // Measure pressure.
-      // The "3" indicates the resolution.
-      // It can be between 0 and 3. 0 is the lowest, 3 is the highest, but it takes longer.
-
-      status = pressio.startPressure(3);
-      if (status != 0) // If pressure can be measured...
-      {
-        // Wait until pressure measurement is complete.
+        // Wait until temperature measurement is complete
         delay(status);
 
-        // Receive pressure measurement
-        // and save it to variable P.
-        // This pressure is calibrated with temperature,
-        // so a previous temperature measurement is required.
+        // Receive temperature measurement
+        // and save it to variable T
 
-        status = pressio.getPressure(P,T);
+        status = pressio.getTemperature(T);
         if (status != 0) // If the measurement can be received...
         {
+        // Measure pressure.
+        // The "3" indicates the resolution.
+        // It can be between 0 and 3. 0 is the lowest, 3 is the highest, but it takes longer.
 
-          // Get relative sea-level pressure
-          // from pressure and initial altitude
-          
-          p0 = pressio.sealevel(P,ALTITUD);
+        status = pressio.startPressure(3);
+        if (status != 0) // If pressure can be measured...
+        {
+            // Wait until pressure measurement is complete.
+            delay(status);
 
-          // Get altitude from the pressure difference.
-          // It is not fully reliable because temperature is not constant.
-          
-          altBMP = pressio.altitude(P,p0);
+            // Receive pressure measurement
+            // and save it to variable P.
+            // This pressure is calibrated with temperature,
+            // so a previous temperature measurement is required.
+
+            status = pressio.getPressure(P,T);
+            if (status != 0) // If the measurement can be received...
+            {
+
+            // Get relative sea-level pressure
+            // from pressure and initial altitude
+            
+            p0 = pressio.sealevel(P,ALTITUD);
+
+            // Get altitude from the pressure difference.
+            // It is not fully reliable because temperature is not constant.
+            
+            altBMP = pressio.altitude(P,p0);
+            }
+            else Serial.println(F("error rebent pressio\n"));
         }
-        else Serial.println(F("error rebent pressio\n"));
-      }
-      else Serial.println(F("error mesurant pressio\n"));
+        else Serial.println(F("error mesurant pressio\n"));
+        }
+        else Serial.println(F("error rebent temperatura\n"));
     }
-    else Serial.println(F("error rebent temperatura\n"));
-  }
-  else Serial.println(F("error mesurant temperatura\n"));
+    else Serial.println(F("error mesurant temperatura\n"));
 
-  // Convert temperature and pressure measurements into integers.
-  // The temperature measurement complements the DHT measurement.
-  // Pressure does not need one-decimal precision; an integer is enough.
+    // Convert temperature and pressure measurements into integers.
+    // The temperature measurement complements the DHT measurement.
+    // Pressure does not need one-decimal precision; an integer is enough.
 
-  tBMP = T;
-  pBMP = P;
+    tBMP = T;
+    pBMP = P;
+  #endif
 
   //GPS
+  #if USE_GPS
 
-  // Start communication with the GPS (through the "secondary" serial port)
-  
-  ss.begin(9600);
+    // Start communication with the GPS (through the "secondary" serial port)
+    
+    ss.begin(9600);
 
-  // Give the GPS three seconds to read the measurements it receives
-  // If this step is skipped, most GPS measurements will not be read.
-  
-    unsigned long start = millis();
-  do 
-  {
-    while (ss.available())
-      gps.encode(ss.read());
-  } while (millis() - start < 3000);
+    // Give the GPS three seconds to read the measurements it receives
+    // If this step is skipped, most GPS measurements will not be read.
+    
+        unsigned long start = millis();
+    do 
+    {
+        while (ss.available())
+        gps.encode(ss.read());
+    } while (millis() - start < 3000);
 
-  // Latitude
-  
-  latE = gps.location.rawLat().deg;
-  latD = gps.location.rawLat().billionths;
+    // Latitude
+    
+    latE = gps.location.rawLat().deg;
+    latD = gps.location.rawLat().billionths;
 
-  // Longitude
+    // Longitude
 
-  lngE = gps.location.rawLng().deg;
-  lngD = gps.location.rawLng().billionths;
+    lngE = gps.location.rawLng().deg;
+    lngD = gps.location.rawLng().billionths;
 
-  // Altitude
-  
-  alt = gps.altitude.meters();
+    // Altitude
+    
+    alt = gps.altitude.meters();
 
-  // Time (UTC)
-  
-  hora= gps.time.hour();
-  min = gps.time.minute();
-  seg = gps.time.second();
+    // Time (UTC)
+    
+    hora= gps.time.hour();
+    min = gps.time.minute();
+    seg = gps.time.second();
 
-  // End communication with the GPS.
-  // VERY IMPORTANT: DO NOT SKIP THIS STEP,
-  // OR THE RADIO WILL NOT TRANSMIT PROPERLY!
+    // End communication with the GPS.
+    // VERY IMPORTANT: DO NOT SKIP THIS STEP,
+    // OR THE RADIO WILL NOT TRANSMIT PROPERLY!
 
-  ss.end();
+    ss.end();
+  #endif
 
   // STRUCTURE STRINGS
 
@@ -415,22 +460,28 @@ void loop() {
 
   // SAVE SONDA STRING TO THE SD CARD
 
-  SondaSD = SD.open("sonda.txt", FILE_WRITE);
-  delay(500);
+  #if USE_SD
+    SondaSD = SD.open("sonda.txt", FILE_WRITE);
+    delay(500);
 
-  if (SondaSD){
-    SondaSD.println(SONDA);
-    SondaSD.close();
-  }
-  else{
-    Serial.println("error obrint sonda.txt");
-  }
+    if (SondaSD){
+        SondaSD.println(SONDA);
+        SondaSD.close();
+    }
+    else{
+        Serial.println("error obrint sonda.txt");
+    }
+  #endif
 
   // TRANSMIT SONDA STRING BY RADIO
   
-  rtty_txstring (SONDA); // Function for transmitting the final probe string by radio (defined later)
-
+  #if USE_RADIO
+    rtty_txstring (SONDA); // Function for transmitting the final probe string by radio (defined later)
+  #endif
   // END OF THE "LOOP" FUNCTION. START AGAIN.
+
+    Serial.println(SONDA);
+    delay(2000);
 
 }
 
