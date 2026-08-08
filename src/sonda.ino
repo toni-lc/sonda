@@ -1,114 +1,179 @@
-// libraries
+// FINAL SONDA CODE.
+// This is the code the probe will run during the flight.
+// It will measure internal and external temperature, humidity, pressure,
+// position, altitude, and time.
+// Then it will package these values into a string
+// that will be saved to an SD card and transmitted by radio.
+// The string is structured as follows:
+// External temperature; internal temperature; humidity; BMP temperature; pressure; BMP altitude; latitude; longitude; altitude; time; checksum.
+// 
+// [X]EXTERNAL TEMPERATURE (DS18B20)
+// [X]INTERNAL TEMPERATURE (DHT22)
+// [X]HUMIDITY             (DHT22)
+// [X]PRESSURE             (BMP180) (+ temperature, + altitude)
+// [X]GPS LOCATION         (u-blox MAX-M8C)
+//      [X]COORDINATES
+//      [X]ALTITUDE
+//      [X]DATE AND TIME
+// [X]SD STORAGE           (Catalex MicroSD Card Adapter)
+// [X]RADIO TRANSMISSION   (Radiometrix NTX2B-FA)
+// 
+// KNOWN ISSUES:
+// -There are no measurements where the decimal part is 1, 3, 6, or 8 (they round up)
+// 
+// Started on 23-8-2015.
+// Finished on 23-9-2015.
+// Sources: Parts of the code are taken directly from:
+// "DS18x20_Temperature" example from the OneWire library. (external temperature measurement)
+// "KitchenSink" example from the TinyGPS++ library. (GPS location)
+// -https://ukhas.org.uk/guides:linkingarduinotontx2 (radio transmission)
 
-#include "DHT.h"  // DHT sensor library
-#include <OneWire.h>  // needed for DS18B20 sensor
-#include <SFE_BMP180.h>  // BMP180 sensor library
-#include "LowPower.h"  // power saving library
-#include <Wire.h>  // I2C library (for BMP180 sensor)
-#include <TinyGPS++.h>  // GPS library
-#include <SoftwareSerial.h>  // needed for GPS-Arduino communication
-#include <util/crc16.h> // verifies data
-#include <SD.h>  // SD card reader library
-#include <SPI.h>  // needed to communicate with SD card reader
 
-// sensors
+// LIBRARIES:
 
-SFE_BMP180 bmp;  // BMP180 sensor
-#define ALT 330.0  // ground elevation (in meters)
+#include <OneWire.h> // DS18B20 sensor library.
+#include "DHT.h" // DHT sensor library
+#include <SFE_BMP180.h> // BMP180 sensor library
+#include <Wire.h> // I2C library, used by the BMP180 sensor
+#include <TinyGPS++.h> // Library for parsing GPS data
+#include <SoftwareSerial.h> // Library for communication between the GPS and the Arduino
+#include <util/crc16.h> // Library for calculating checksums
+#include <SD.h> // Library for using the SD card
+#include <SPI.h> // Library for communication with the SD card
 
-#define DHTPIN 2  // Arduino digital pin the DHT "out" pin is connected to 
-#define DHTTYPE DHT22  // our DHT sensor is a DHT22 type
-DHT dht(DHTPIN, DHTTYPE);  // DHT sensor
+// SENSORS:
 
-OneWire ds(8); // Arduino digital pin the DS18B20 "yellow" pin is connected to
+//DS18B20:
 
-TinyGPSPlus gps;  // GPS
-// The GPS communicates with the board through a software-emulated serial port
-// the RX (TX) serial line of the board must be connected with the TX (RX) line of the GPS
-SoftwareSerial ss(4, 3);  // RX - TX serial lines
+OneWire ds(8); // The DS sensor is connected to digital pin 8
 
-#define READER 10  // board pin the card reader CS pin is connected to
-File SondaSD;  // output file in the SD card
+//DHT22:
 
-# define RADIOPIN 9  // board pin the transmitter TX pin is connected to
+#define DHTPIN 2 // The DHT sensor is connected to digital pin 2
+#define DHTTYPE DHT22 // The DHT sensor is a DHT22
 
-// variables
+DHT dht(DHTPIN, DHTTYPE); // "dht" object for the DHT sensor: a DHT22 connected to digital pin 2
 
-float T1 = 0;   // DHT22 temperature (ºC)
-float T2 = 0;   // DS18B20 temperature (ºC)
-double T3 = 0;  // BMP180 temperature (ºC)
-double p = 0;   // BMP180 absolute pressure (hPa)
-double p0 = 0;  // BMP180 sea-level pressure (hPa)
-int alt1 = 0;   // BMP180 calculated altitude (m)
-float U = 0;    // DHT22 relative humidity (%)
+//BMP180:
 
-long latE = 0;  // latitude (deg), integer part
-long latD = 0;  // latitude (deg), decimal part
-long lngE = 0;  // longitude (deg), integer part
-long lngD = 0;  // longitude (deg), decimal part
-double lat = 0; // latitude (deg)
-double lng = 0; // longitude (deg)
-int alt2 = 0;   // GPS calculated altitude (m)
-int hour = 0;   // hours (in UTC time)
-int min = 0;    // minutes
-int sec = 0;    // seconds
+SFE_BMP180 pressio; // "pressio" object for the BMP180 sensor
+#define ALTITUD 330.0 // Altitude from which pressure measurement starts
 
-// since the positive sign cannot be added directly to the coordinates,
-// they will be stored in separate strings and then added to the final string
-char latSign;
-char lngSign;
+// GPS locator:
+
+TinyGPSPlus gps; // "gps" object for the GPS locator
+
+// The GPS communicates with the Arduino board
+// through a software serial port (in this case, pins 4 and 3).
+SoftwareSerial ss(4, 3); // "ss" object for the software serial port
+
+// SD card:
+
+#define TARGETA 10 // SD card pin (module CS pin) connected to Arduino digital pin 10
+File SondaSD; // "SondaSD" object for the SD card file where data will be saved
+
+//Radiometrix NTX2B-FA:
+
+#define RADIOPIN 9 // Transmission pin (transmitter pin 7) connected to Arduino digital pin 9
+
+// VARIABLES:
+
+// float=decimal number; int=integer (2 bytes); long=integer (4 bytes); char=string
+
+// Sensor variables
+
+float tDS = 0; // External temperature (degrees Celsius)
+
+float tDHT = 0; // Internal temperature from the DHT sensor (degrees Celsius)
+int hDHT = 0; // Humidity (%)
+
+int tBMP; // Internal temperature from the BMP sensor (degrees Celsius)
+int pBMP; // Pressure (mbar)
+int p0; // Pressure (relative, at sea level)
+int altBMP; // Altitude (calculated by the BMP sensor)
+
+// GPS variables
+
+long latE = 0; // Latitude (degrees, integer part)
+long latD = 0; // Latitude (degrees, decimal part)
+
+long lngE = 0; // Longitude (degrees, integer part)
+long lngD = 0; // Longitude (degrees, decimal part)
+
+int alt = 0; // Altitude
+
+int hora = 0; // Hours (UTC time!)
+int min = 0; // Minutes
+int seg = 0; // Seconds
+
+// STRINGS:
+
+// Since the positive or negative sign cannot be added directly to the coordinates,
+// it will be stored in separate strings and then added to the final string,
+// which will be transmitted by radio and saved to the SD card.
+
 char GPS1[20];
 char GPS2[30];
+char SONDA [90]; // Final string
 
-// string variables containing float values
-char T1c[5];
-char T2c[5];
-char T3c[5];
-char pc[6];
-char Uc[5];
-char latc[11];
-char lngc[11];
-
-char SONDA[90]; // final string
-
-void setup() {  // initializes serial port and components
+void setup() { 
   
-  Serial.begin(38400); //obrir comunicació amb port sèrie
+  // This section prepares everything the flight computer will do.
+  // It only runs once, at startup.
+
+  // OPEN SERIAL PORT COMMUNICATION
+  // Serial port communication is only used for pre-flight setup.
+
+  Serial.begin(38400); // Open serial port communication
   Serial.println(F("TEST SONDA"));
 
-  // SD card communication
-  Serial.println(F("PREPARING SD"));
-  pinMode(READER, OUTPUT);
+  // OPEN SD CARD COMMUNICATION
 
-  if (!SD.begin(10)) {
-    Serial.println(F("ERROR SD"));  // data will not be stored in the SD card
+  // Prepare SD card communication
+
+  Serial.println(F("Preparant SD"));
+  pinMode(TARGETA,OUTPUT);
+
+  // Start SD card communication.
+  // If communication cannot be established now, data cannot be saved during the flight.
+
+  if(!SD.begin(10)){
+    Serial.println(F("ERROR SD")); 
   }
-  else {
-    Serial.println(F("SD OK"));
+  else{
+  Serial.println(F("SD OK"));
   }
 
-  // radio communication
-  pinMode(RADIOPIN, OUTPUT);
+  // PREPARE RADIO COMMUNICATION
+
+  pinMode(RADIOPIN,OUTPUT);
   setPwmFrequency(RADIOPIN, 1);
 
-  dht.begin();  // initializes DHT22 sensor
+  // START DHT22 SENSOR
+
+  dht.begin();
+
+  // START BMP180 SENSOR
   
-  // initializes BMP180 sensor
-  if (bmp.begin()) {
+  if (pressio.begin()) { // If the sensor starts,
     Serial.println(F("BMP OK"));
   }
-  else {
+  else{ // If it does not start,
     Serial.println(F("BMP ERROR"));
   }
 
 }
 
-void loop() {
-
-  // actions to be done by the flight computer
+void loop() { 
   
-  // DS18B20 measurements
-  // extracted from the "DS18x20_Temperature" example in the OneWire library.
+  // This section repeats cyclically during the whole run.
+  // All actions performed by the flight computer are included here.
+
+  //DS18B20
+
+  // GET EXTERNAL TEMPERATURE.
+  // Taken from the "DS18x20_Temperature" example from the OneWire library.
+  // This is not original code; it has been left intact.
 
   byte i;
   byte present = 0;
@@ -116,22 +181,23 @@ void loop() {
   byte data[12];
   byte addr[8];
   
-  // searches the address of the DS18B20 sensor
   if ( !ds.search(addr)) {
+    Serial.println("No more addresses.");
+    Serial.println();
     ds.reset_search();
     delay(250);
     return;
   }
-
+  
   ds.reset();
   ds.select(addr);
   ds.write(0x44, 1);        // start conversion, with parasite power on at the end
-
+  
   delay(1000);     // maybe 750ms is enough, maybe not
   // we might do a ds.depower() here, but the reset will take care of it.
-
+  
   present = ds.reset();
-  ds.select(addr);
+  ds.select(addr);    
   ds.write(0xBE);         // Read Scratchpad
 
   for ( i = 0; i < 9; i++) {           // we need 9 bytes
@@ -157,147 +223,264 @@ void loop() {
     else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
     //// default is 12 bit resolution, 750 ms conversion time
   }
-  T2 = (float)raw / 16.0;
+  tDS = (float)raw / 16.0;
 
-  // DHT22 measurements
+  // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
+  // It is approximated to one decimal by truncation.
+  // The tDS value is split into tDSE (integer part) and tDSD (decimal part)
 
-  T1 = dht.readTemperature();
-  U = dht.readHumidity();
-  // BMP180 measurements
+  int tDSE = tDS;
+  float tDS2 = tDS - tDSE;
+  int tDSD = trunc(tDS2*10);
+
+  //DHT
   
-   char status;
-  status = bmp.startTemperature();
-  if (status != 0)
+  // GET INTERNAL TEMPERATURE.
+
+  tDHT = dht.readTemperature(); // Read internal temperature
+
+  // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
+  // It is approximated to one decimal by truncation.
+  // The tInt value is split into tIntE (integer part) and tIntD (decimal part)
+
+  int tDHTE = tDHT;
+  float tDHT2 = tDHT - tDHTE;
+  int tDHTD = trunc(tDHT2*10);
+
+  // GET HUMIDITY.
+     
+  hDHT = dht.readHumidity(); // Read the humidity value and name it "h"
+
+  // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
+  // It is approximated to one decimal by truncation.
+  // The h value is split into hE (integer part) and hD (decimal part)
+  
+  int hDHTE = hDHT;
+  float hDHT2 = hDHT - hDHTE;
+  int hDHTD = trunc(hDHT2*10);
+
+  //BMP180
+  // This section is copied from the code
+  // in section 2 of appendix 1 (test 2. BMP180 pressure sensor)
+
+  char status; // Define status variable (returns 1 if there are no problems, 0 if there are)
+  double T,P;
+  
+  // T: define variable T (temperature in degrees C)
+  // P: define variable P (absolute pressure in mbar)
+
+  // Measure temperature.
+   
+  status = pressio.startTemperature();
+  if (status != 0) // If temperature can be measured...
   {
+    // Wait until temperature measurement is complete
     delay(status);
-    status = bmp.getTemperature(T3);
-    if (status != 0)
+
+    // Receive temperature measurement
+    // and save it to variable T
+
+    status = pressio.getTemperature(T);
+    if (status != 0) // If the measurement can be received...
     {
-      status = bmp.startPressure(3);
-      if (status != 0)
+      // Measure pressure.
+      // The "3" indicates the resolution.
+      // It can be between 0 and 3. 0 is the lowest, 3 is the highest, but it takes longer.
+
+      status = pressio.startPressure(3);
+      if (status != 0) // If pressure can be measured...
       {
+        // Wait until pressure measurement is complete.
         delay(status);
-        status = bmp.getPressure(p,T3);
-        p0 = bmp.sealevel(p, ALT);  // corrects pressure to sea-level 
-        alt1 = bmp.altitude(p, p0); 
+
+        // Receive pressure measurement
+        // and save it to variable P.
+        // This pressure is calibrated with temperature,
+        // so a previous temperature measurement is required.
+
+        status = pressio.getPressure(P,T);
+        if (status != 0) // If the measurement can be received...
+        {
+
+          // Get relative sea-level pressure
+          // from pressure and initial altitude
+          
+          p0 = pressio.sealevel(P,ALTITUD);
+
+          // Get altitude from the pressure difference.
+          // It is not fully reliable because temperature is not constant.
+          
+          altBMP = pressio.altitude(P,p0);
+        }
+        else Serial.println(F("error rebent pressio\n"));
       }
+      else Serial.println(F("error mesurant pressio\n"));
     }
+    else Serial.println(F("error rebent temperatura\n"));
   }
-  // GPS
-  ss.begin(9600);  // opens secondary serial port
-  unsigned long start = millis();
-  do
+  else Serial.println(F("error mesurant temperatura\n"));
+
+  // Convert temperature and pressure measurements into integers.
+  // The temperature measurement complements the DHT measurement.
+  // Pressure does not need one-decimal precision; an integer is enough.
+
+  tBMP = T;
+  pBMP = P;
+
+  //GPS
+
+  // Start communication with the GPS (through the "secondary" serial port)
+  
+  ss.begin(9600);
+
+  // Give the GPS three seconds to read the measurements it receives
+  // If this step is skipped, most GPS measurements will not be read.
+  
+    unsigned long start = millis();
+  do 
   {
-   while (ss.available())
-     gps.encode(ss.read());
+    while (ss.available())
+      gps.encode(ss.read());
   } while (millis() - start < 3000);
+
+  // Latitude
+  
   latE = gps.location.rawLat().deg;
   latD = gps.location.rawLat().billionths;
+
+  // Longitude
+
   lngE = gps.location.rawLng().deg;
   lngD = gps.location.rawLng().billionths;
 
-  lat = gps.location.lat();
-  lng = gps.location.lng();
+  // Altitude
   
-  alt2 = gps.altitude.meters();
-  hour= gps.time.hour();
+  alt = gps.altitude.meters();
+
+  // Time (UTC)
+  
+  hora= gps.time.hour();
   min = gps.time.minute();
-  sec = gps.time.second();
+  seg = gps.time.second();
 
-  ss.end();  // necessary for correct radio transmission (apparently)
+  // End communication with the GPS.
+  // VERY IMPORTANT: DO NOT SKIP THIS STEP,
+  // OR THE RADIO WILL NOT TRANSMIT PROPERLY!
 
-  // structures data
+  ss.end();
 
-  dtostrf(T1, 3, 1, T1c);
-  dtostrf(T2, 3, 1, T2c);
-  dtostrf(T3, 3, 1, T3c);
-  dtostrf(p, 4, 1, pc);
-  dtostrf(U, 3, 1, Uc);
-  dtostrf(lat, 3, 6, latc);
-  dtostrf(lng, 3, 6, lngc);
+  // STRUCTURE STRINGS
 
-  sprintf(SONDA, "%s;%s;%s;%s;%s;%u;", T1c, T2c, T3c, pc, Uc, alt1);
+  // Add sensor measurements to the SONDA string
 
-  latSign = gps.location.rawLat().negative ? "-" : "+";
-  lngSign = gps.location.rawLng().negative ? "-" : "+";
+  sprintf(SONDA, "%d,%d;%d,%d;%d,%d;%d;%d;%d;", tDSE, tDSD, tDHTE, tDHTD, hDHTE, hDHTD, tBMP, pBMP, altBMP);
 
-  sprintf(GPS1, "%s;",latc);
-  sprintf(GPS2, "%s;%d;%02d:%02d:%02d", lngc, alt2, hour, min, sec);
+  // Add latitude measurement to the GPS1 string.
+  // A negative latitude measurement (south) will not show the sign by default.
+  // Therefore, it must be added manually.
 
-  strcat(latSign, GPS1);
-  strcat(lngSign, GPS2);
+  if (gps.location.lat() < 0)
+  {
+    sprintf(GPS1, "-%ld.%ld;", latE, latD);
+  }
+  else
+  {
+    sprintf(GPS1, "%ld.%ld;", latE, latD);
+  }
+
+  // Add longitude, altitude, and time measurements to the GPS2 string.
+  // A negative longitude measurement (west) will not show the sign by default.
+  // Therefore, it must be added manually.
+
+  if (gps.location.lng() < 0)
+  {
+    sprintf(GPS2, "-%ld.%ld;%d;%02d:%02d:%02d", lngE, lngD, alt, hora, min, seg);
+  }
+  else
+  {
+    sprintf(GPS2, "%ld.%ld;%d;%02d:%02d:%02d", lngE, lngD, alt, hora, min, seg);
+  }
+
+  // Add GPS1 and GPS2 strings to the SONDA string
+  
   strcat(SONDA, GPS1);
   strcat(SONDA, GPS2);
 
-  // saves data in SD card
+  // SAVE SONDA STRING TO THE SD CARD
 
-  SondaSD = SD.open("res.txt", FILE_WRITE);
+  SondaSD = SD.open("sonda.txt", FILE_WRITE);
   delay(500);
 
-  if (SondaSD) {
-  SondaSD.println(SONDA);
+  if (SondaSD){
+    SondaSD.println(SONDA);
     SondaSD.close();
   }
-  else {
-    Serial.println("ERROR OPENING SD FILE");
+  else{
+    Serial.println("error obrint sonda.txt");
   }
 
-  // adds a checksum at the end of the SONDA string
-  unsigned int CHECKSUM = gps_CRC16_checksum(SONDA);
-  char VERIFICACIO[6];
-  sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); 
-  strcat(SONDA, VERIFICACIO);
+  // ADD CHECKSUM TO THE SONDA STRING
+  
+  unsigned int CHECKSUM = gps_CRC16_checksum(SONDA); // Function for calculating the checksum for the SONDA string (defined later)
+  char VERIFICACIO[6]; // Define VERIFICACIO as a string
+  sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); // Structure the VERIFICACIO string
+  strcat(SONDA, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
 
-// output
+  // TRANSMIT SONDA STRING BY RADIO
+  
+  rtty_txstring (SONDA); // Function for transmitting the final probe string by radio (defined later)
 
-  Serial.print(SONDA);
-  rtty_txstring (SONDA); // sends data over radio
-  delay(2000);
+  // END OF THE "LOOP" FUNCTION. START AGAIN.
+
 }
 
-// *****************************************************
-// Sends a string via RTTY.
-// From https://ukhas.org.uk/guides:linkingarduinotontx2.
+// RADIO STRING TRANSMISSION FUNCTION.
+// This code was taken directly from the code found
+// in the "Linking an Arduino to a Radiometrix NTX2B Transmitter" tutorial,
+// available at https://ukhas.org.uk/guides:linkingarduinotontx2.
+// This is not original code; it has been left intact.
 
 void rtty_txstring (char * string) {
-/*     Simple function to sent a char at a time to    
- *      ** rtty_txbyte function.    
- *      ** NB Each char is one byte (8 Bits)
- *      */
-
+    /* Simple function to sent a char at a time to
+    ** rtty_txbyte function.
+    ** NB Each char is one byte (8 Bits)
+    */
+ 
     char c;
     c = *string++;
-
+ 
     while ( c != '\0') {
         rtty_txbyte (c);
         c = *string++;
     }
-  }
-  void rtty_txbyte (char c) {
-/*     Simple function to sent each bit of a char to    
- *      rtty_txbit function.
- *      NB The bits are sent Least Significant Bit first    
- *      All chars should be preceded with a 0 and    
- *      proceed with a 1. 0 = Start bit; 1 = Stop bit
- *      */
-
+}
+void rtty_txbyte (char c) {
+    /* Simple function to sent each bit of a char to
+    ** rtty_txbit function.
+    ** NB The bits are sent Least Significant Bit first
+    **
+    ** All chars should be preceded with a 0 and
+    ** proceed with a 1. 0 = Start bit; 1 = Stop bit
+    **
+    */
+ 
     int i;
-
+ 
     rtty_txbit (0); // Start bit
-
+ 
     // Send bits for for char LSB first
-
+ 
     for (i=0;i<7;i++) { // Change this here 7 or 8 for ASCII-7 / ASCII-8
         if (c & 1) rtty_txbit(1);
         else rtty_txbit(0);
-
+ 
         c = c >> 1;
     }
     rtty_txbit (1); // Stop bit
     rtty_txbit (1); // Stop bit
-  }
-
-  void rtty_txbit (int bit) {
+}
+ 
+void rtty_txbit (int bit) {
     if (bit) {
         // high
         analogWrite(RADIOPIN,110);
@@ -306,31 +489,31 @@ void rtty_txstring (char * string) {
         // low
         analogWrite(RADIOPIN,100);
     }
-
+ 
     // delayMicroseconds(3370); // 300 baud
     delayMicroseconds(10000); // For 50 Baud uncomment this and the line below.
     delayMicroseconds(10150); // You can't do 20150 it just doesn't work as the
     // largest value that will produce an accurate delay is 16383
     // See : http://arduino.cc/en/Reference/DelayMicroseconds
-  }
-
-  uint16_t gps_CRC16_checksum (char *string) {
+}
+ 
+uint16_t gps_CRC16_checksum (char *string) {
     size_t i;
     uint16_t crc;
     uint8_t c;
-
+ 
     crc = 0xFFFF;
-
+ 
     // Calculate checksum ignoring the first two $s
     for (i = 2; i < strlen(string); i++) {
         c = string[i];
         crc = _crc_xmodem_update (crc, c);
     }
-
+ 
     return crc;
-  }
-
-  void setPwmFrequency(int pin, int divisor) {
+}
+ 
+void setPwmFrequency(int pin, int divisor) {
     byte mode;
     if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
         switch(divisor) {
@@ -352,7 +535,7 @@ void rtty_txstring (char * string) {
             default:
                 return;
         }
-
+ 
         if(pin == 5 || pin == 6) {
             TCCR0B = TCCR0B & 0b11111000 | mode;
         }
@@ -388,13 +571,4 @@ void rtty_txstring (char * string) {
         }
         TCCR2B = TCCR2B & 0b11111000 | mode;
     }
-  }
-
-
-String format_string(float x, int w, int d) {
-  char s[w + d + 2];
-  dtostrf(x, w, d, s);
-  s[w] = ',';
-  String str(s);
-  return str;
 }
