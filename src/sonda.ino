@@ -304,7 +304,7 @@ void loop() {
   #endif
 
   //BMP180
-  #if USE_BMP180
+  #if USE_BMP
     char status; // Define status variable (returns 1 if there are no problems, 0 if there are)
     double T,P;
     
