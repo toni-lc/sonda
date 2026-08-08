@@ -70,11 +70,16 @@
 #define USE_RADIO 1
 #endif
 
+#ifndef TEST_RUN
+#define TEST_RUN 0
+#endif
+
 // SENSORS:
 
 //DS18B20:
 
 OneWire ds(8); // The DS sensor is connected to digital pin 8
+byte type_s = 0; // for DS18S20 change to 1
 
 //DHT22:
 
@@ -141,6 +146,8 @@ int hora = 0; // Hours (UTC time!)
 int min = 0; // Minutes
 int seg = 0; // Seconds
 
+int iter = 0; // measurement iteration
+
 // STRINGS:
 
 // Since the positive or negative sign cannot be added directly to the coordinates,
@@ -206,6 +213,18 @@ void setup() {
 }
 
 void loop() { 
+
+    iter++;
+
+    #if TEST_RUN
+    if (iter > 10) {
+        // enters infinite loop, does not measure again
+        // this is the closest we have to "stopping the program"
+        while (true) {
+            delay(1000);
+        }
+    }
+    #endif
   
   // This section repeats cyclically during the whole run.
   // All actions performed by the flight computer are included here.
@@ -216,10 +235,11 @@ void loop() {
   // Taken from the "DS18x20_Temperature" example from the OneWire library.
   // This is not original code; it has been left intact.
 
+  // TODO: fix! the address search should be in the setup? otherwise there are no measurements
+  // if the DS18B20 is not found!!
   #if USE_DS
     byte i;
     byte present = 0;
-    byte type_s;
     byte data[12];
     byte addr[8];
     
@@ -228,7 +248,7 @@ void loop() {
         Serial.println();
         ds.reset_search();
         delay(250);
-        return;
+        return; // <- TODO: FIX THIS! 
     }
     
     ds.reset();
@@ -286,9 +306,9 @@ void loop() {
   // It is approximated to one decimal by truncation.
   // The tInt value is split into tIntE (integer part) and tIntD (decimal part)
 
-  int tDHTE = tDHT;
+  tDHTE = tDHT;
   float tDHT2 = tDHT - tDHTE;
-  int tDHTD = trunc(tDHT2*10);
+  tDHTD = trunc(tDHT2*10);
 
   // GET HUMIDITY.
      
@@ -479,8 +499,11 @@ void loop() {
     rtty_txstring (SONDA); // Function for transmitting the final probe string by radio (defined later)
   #endif
   // END OF THE "LOOP" FUNCTION. START AGAIN.
-
-    Serial.println(SONDA);
+  
+    Serial.print("Iteration ");
+    Serial.print(iter);
+    Serial.print(" : ");
+    Serial.print(SONDA);
     delay(2000);
 
 }
