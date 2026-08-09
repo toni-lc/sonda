@@ -197,6 +197,7 @@ void setup() {
 
   #if USE_DHT
     dht.begin();
+    Serial.println(F("DHT OK"));
   #endif
 
   // START BMP180 SENSOR
@@ -290,7 +291,7 @@ void loop() {
     // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
     // It is approximated to one decimal by truncation.
     // The tDS value is split into tDSE (integer part) and tDSD (decimal part)
-
+    
     tDSE = tDS;
     float tDS2 = tDS - tDSE;
     tDSD = trunc(tDS2*10);
