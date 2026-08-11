@@ -130,7 +130,7 @@ Set a flag to `0` to exclude that subsystem from the build.
 The main telemetry string is structured as:
 
 ```text
-ds_temp;dht_temp;humidity;bmp_temp;pressure;bmp_altitude;lat;lng;gps_altitude;time;checksum
+ds_temp;dht_temp;humidity;bmp_temp;pressure;bmp_altitude;lat;lng;gps_altitude;time*checksum
 ```
 
 Example shape:

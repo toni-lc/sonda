@@ -33,4 +33,4 @@ This document describes the wiring used by the original `sonda.ino` firmware **i
 ## Pull-Up Resistors
 
 - DS18B20: the yellow data wire is also connected to 5V through a 4.7 kΩ pull-up resistor.
-- DHT22: the `out` pin is also connected to 5V through a 10 kΩ pull-up resistor.
+- DHT22: the `out` pin is also connected to 3.3V through a 10 kΩ pull-up resistor.
