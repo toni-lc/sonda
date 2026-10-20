@@ -1,0 +1,27 @@
+#!/bin/sh
+
+if command -v platformio >/dev/null 2>&1; then
+    PLATFORMIO="$(command -v platformio)"
+elif command -v pio >/dev/null 2>&1; then
+    PLATFORMIO="$(command -v pio)"
+else
+    PLATFORMIO_HOME="$HOME"
+    if [ -n "$USERPROFILE" ] && command -v cygpath >/dev/null 2>&1; then
+        PLATFORMIO_HOME="$(cygpath -u "$USERPROFILE")"
+    fi
+
+    if [ -x "$PLATFORMIO_HOME/.platformio/penv/Scripts/platformio.exe" ]; then
+        PLATFORMIO="$PLATFORMIO_HOME/.platformio/penv/Scripts/platformio.exe"
+    else
+        echo 'PlatformIO CLI not found. Add platformio or pio to PATH, or install it in ~/.platformio/penv.' >&2
+        exit 127
+    fi
+fi
+
+if [ -z "$PLATFORMIO" ]; then
+    echo 'PlatformIO CLI not found. Add platformio or pio to PATH, or install it in ~/.platformio/penv.' >&2
+    exit 127
+fi
+
+echo 'Building atmega328p_full before commit...'
+"$PLATFORMIO" run --environment atmega328p_full
