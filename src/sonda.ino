@@ -28,7 +28,7 @@
 // or measurement output. If the flag value is 0 the corresponding part will not execute
 // By default all flags are 1 so everything executes.
 
-#include <library_imports.h> // libraries
+#include <Arduino.h>
 
 #ifndef USE_DS
 #define USE_DS 1
@@ -58,42 +58,54 @@
 #define TEST_RUN 0
 #endif
 
+#include <library_imports.h> // libraries
 
 // SENSORS:
 
 //DS18B20:
 
+#if USE_DS
 OneWire ds(8); // The DS sensor is connected to digital pin 8
 byte type_s = 0; // for DS18S20 change to 1
+#endif
 
 //DHT22:
 
+#if USE_DHT
 #define DHTPIN 2 // The DHT sensor is connected to digital pin 2
 #define DHTTYPE DHT22 // The DHT sensor is a DHT22
 
 DHT dht(DHTPIN, DHTTYPE); // "dht" object for the DHT sensor: a DHT22 connected to digital pin 2
+#endif
 
 //BMP180:
 
+#if USE_BMP
 SFE_BMP180 pressio; // "pressio" object for the BMP180 sensor
 #define ALTITUD 330.0 // Altitude from which pressure measurement starts
+#endif
 
 // GPS locator:
 
+#if USE_GPS
 TinyGPSPlus gps; // "gps" object for the GPS locator
 
 // The GPS communicates with the Arduino board
 // through a software serial port (in this case, pins 4 and 3).
 SoftwareSerial ss(4, 3); // "ss" object for the software serial port
+#endif
 
 // SD card:
-
+#if USE_SD
 #define TARGETA 10 // SD card pin (module CS pin) connected to Arduino digital pin 10
 File SondaSD; // "SondaSD" object for the SD card file where data will be saved
+#endif
 
 //Radiometrix NTX2B-FA:
 
+#if USE_RADIO
 #define RADIOPIN 9 // Transmission pin (transmitter pin 7) connected to Arduino digital pin 9
+#endif
 
 // VARIABLES:
 
@@ -220,7 +232,7 @@ void loop() {
   // if the DS18B20 is not found!!
   #if USE_DS
     byte i;
-    byte present = 0;
+    byte present = 1;
     byte data[12];
     byte addr[8];
     
@@ -229,8 +241,10 @@ void loop() {
         Serial.println();
         ds.reset_search();
         delay(250);
-        return; // <- TODO: FIX THIS! 
+        present = 0;
     }
+
+    if (present){
     
     ds.reset();
     ds.select(addr);
@@ -246,6 +260,7 @@ void loop() {
     for ( i = 0; i < 9; i++) {           // we need 9 bytes
         data[i] = ds.read();
     }
+    ds.reset_search();
 
     // Convert the data to actual temperature
     // because the result is a 16 bit signed integer, it should
@@ -272,6 +287,11 @@ void loop() {
     // sprintf in Arduino does not support floats or doubles,
     // it's either dtostrf or splitting each variable into integer and decimal part 
     dtostrf(tDS, 2, 1, buf);
+}
+else {
+    buf[0] = '\0'; // clean buffer
+    strcat(buf, "ERR");
+}
     strcat(res, buf);
     strcat(res, SEP);
 
@@ -363,7 +383,6 @@ void loop() {
     // OR THE RADIO WILL NOT TRANSMIT PROPERLY!
 
     ss.end();
-  #endif
 
   // STRUCTURE STRINGS
 
@@ -401,14 +420,14 @@ void loop() {
   strcat(res, GPS1);
   strcat(res, SEP);
   strcat(res, GPS2);
+  #endif
 
   // ADD CHECKSUM TO THE SONDA STRING
   
   unsigned int CHECKSUM = gps_CRC16_checksum(res); // Function for calculating the checksum for the SONDA string (defined later)
-  char VERIFICACIO[6]; // Define VERIFICACIO as a string
+  char VERIFICACIO[7]; // Define VERIFICACIO as a string
   sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); // Structure the VERIFICACIO string
   strcat(res, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
-
   // SAVE SONDA STRING TO THE SD CARD
 
   #if USE_SD
@@ -427,7 +446,7 @@ void loop() {
   // TRANSMIT SONDA STRING BY RADIO
   
   #if USE_RADIO
-    rtty_txstring (res); // Function for transmitting the final probe string by radio (defined later)
+    rtty_txstring (RADIOPIN, res); // Function for transmitting the final probe string by radio (defined later)
   #endif
   // END OF THE "LOOP" FUNCTION. START AGAIN.
   
@@ -435,6 +454,9 @@ void loop() {
     Serial.print(iter);
     Serial.print(" : ");
     Serial.print(res);
+
+    // clean final string
+    res[0] = '\0';
     delay(2000);
 
 }
@@ -445,7 +467,7 @@ void loop() {
 // available at https://ukhas.org.uk/guides:linkingarduinotontx2.
 // This is not original code; it has been left intact.
 
-void rtty_txstring (char * string) {
+void rtty_txstring (int pin, char * string) {
     /* Simple function to sent a char at a time to
     ** rtty_txbyte function.
     ** NB Each char is one byte (8 Bits)
@@ -455,11 +477,11 @@ void rtty_txstring (char * string) {
     c = *string++;
  
     while ( c != '\0') {
-        rtty_txbyte (c);
+        rtty_txbyte (pin, c);
         c = *string++;
     }
 }
-void rtty_txbyte (char c) {
+void rtty_txbyte (int pin, char c) {
     /* Simple function to sent each bit of a char to
     ** rtty_txbit function.
     ** NB The bits are sent Least Significant Bit first
@@ -471,28 +493,28 @@ void rtty_txbyte (char c) {
  
     int i;
  
-    rtty_txbit (0); // Start bit
+    rtty_txbit (pin, 0); // Start bit
  
     // Send bits for for char LSB first
  
     for (i=0;i<7;i++) { // Change this here 7 or 8 for ASCII-7 / ASCII-8
-        if (c & 1) rtty_txbit(1);
-        else rtty_txbit(0);
+        if (c & 1) rtty_txbit(pin, 1);
+        else rtty_txbit(pin, 0);
  
         c = c >> 1;
     }
-    rtty_txbit (1); // Stop bit
-    rtty_txbit (1); // Stop bit
+    rtty_txbit (pin, 1); // Stop bit
+    rtty_txbit (pin, 1); // Stop bit
 }
- 
-void rtty_txbit (int bit) {
+
+void rtty_txbit (int pin, int bit) {
     if (bit) {
         // high
-        analogWrite(RADIOPIN,110);
+        analogWrite(pin,110);
     }
     else {
         // low
-        analogWrite(RADIOPIN,100);
+        analogWrite(pin,100);
     }
  
     // delayMicroseconds(3370); // 300 baud
