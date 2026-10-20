@@ -17,12 +17,7 @@
 //      [X]DATE AND TIME
 // [X]SD STORAGE           (Catalex MicroSD Card Adapter)
 // [X]RADIO TRANSMISSION   (Radiometrix NTX2B-FA)
-// 
-// KNOWN ISSUES:
-// -There are no measurements where the decimal part is 1, 3, 6, or 8 (they round up)
-// 
-// Started on 23-8-2015.
-// Finished on 23-9-2015.
+//
 // Sources: Parts of the code are taken directly from:
 // "DS18x20_Temperature" example from the OneWire library. (external temperature measurement)
 // "KitchenSink" example from the TinyGPS++ library. (GPS location)
