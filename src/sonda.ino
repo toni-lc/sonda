@@ -93,6 +93,11 @@ TinyGPSPlus gps; // "gps" object for the GPS locator
 // The GPS communicates with the Arduino board
 // through a software serial port (in this case, pins 4 and 3).
 SoftwareSerial ss(4, 3); // "ss" object for the software serial port
+
+RawDegrees raw_lat; // latitude (degrees)
+RawDegrees raw_lng; // longitude (degrees)
+TinyGPSTime time;   // time (UTC)
+
 #endif
 
 // SD card:
@@ -123,17 +128,6 @@ double pBMP; // Pressure (mbar)
 
 // GPS variables
 
-long latE = 0; // Latitude (degrees, integer part)
-long latD = 0; // Latitude (degrees, decimal part)
-
-long lngE = 0; // Longitude (degrees, integer part)
-long lngD = 0; // Longitude (degrees, decimal part)
-
-int alt = 0; // Altitude
-
-int hora = 0; // Hours (UTC time!)
-int min = 0; // Minutes
-int seg = 0; // Seconds
 
 int iter = 0; // measurement iteration
 
@@ -146,8 +140,6 @@ char SEP[] = ";"; // separator between variables
 // it will be stored in separate strings and then added to the final string,
 // which will be transmitted by radio and saved to the SD card.
 
-char GPS1[20];
-char GPS2[30];
 char res[90]; // Final string
 
 void setup() { 
@@ -289,8 +281,7 @@ void loop() {
     dtostrf(tDS, 2, 1, buf);
 }
 else {
-    buf[0] = '\0'; // clean buffer
-    strcat(buf, "ERR");
+    strcpy(buf, "ERR");
 }
     strcat(res, buf);
     strcat(res, SEP);
@@ -358,25 +349,59 @@ else {
         gps.encode(ss.read());
     } while (millis() - start < 3000);
 
-    // Latitude
-    
-    latE = gps.location.rawLat().deg;
-    latD = gps.location.rawLat().billionths;
+    if (!gps.location.isValid()) {
+        strcpy(buf, "ERR;ERR;");
+        strcat(res, buf);
+    } else {
+    // latitude
+    raw_lat = gps.location.rawLat();
+    if (raw_lat.negative){
+        strcat(res, "-");
+    }
+    else {
+        strcat(res, "+");
+    }
+    sprintf(buf, "%u.%09lu",
+            (unsigned int)raw_lat.deg,
+            (unsigned long)raw_lat.billionths);
+    strcat(res, buf);
+    strcat(res, SEP);
 
-    // Longitude
-
-    lngE = gps.location.rawLng().deg;
-    lngD = gps.location.rawLng().billionths;
+    // longitude
+    raw_lng = gps.location.rawLng();
+    if (raw_lng.negative){
+        strcat(res, "-");
+    }
+    else {
+        strcat(res, "+");
+    }
+    sprintf(buf, "%u.%09lu",
+            (unsigned int)raw_lng.deg,
+            (unsigned long)raw_lng.billionths);
+    strcat(res, buf);
+    strcat(res, SEP);
+    }
 
     // Altitude
     
-    alt = gps.altitude.meters();
+    if (gps.altitude.isValid()){
+        utoa(buf, (int)gps.altitude.meters(), 10);
+    }
+    else {
+        strcpy(buf, "ERR");
+    }
+    strcat(res, buf);
+    strcat(res, SEP);
 
     // Time (UTC)
-    
-    hora= gps.time.hour();
-    min = gps.time.minute();
-    seg = gps.time.second();
+    time = gps.time;
+    if (!time.isValid()){
+        strcpy(buf, "ERR;");
+        strcat(res, buf);
+    } else {
+    sprintf(buf, "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
+    strcat(res, buf);
+    }
 
     // End communication with the GPS.
     // VERY IMPORTANT: DO NOT SKIP THIS STEP,
@@ -384,52 +409,13 @@ else {
 
     ss.end();
 
-  // STRUCTURE STRINGS
-
-  // Add sensor measurements to the SONDA string
-//   sprintf(SONDA, "%+.1f;%+.1f;%.1f;%+.1f;%d", tDS, tDHT, hDHT, tBMP, pBMP);
-
-  // Add latitude measurement to the GPS1 string.
-  // A negative latitude measurement (south) will not show the sign by default.
-  // Therefore, it must be added manually.
-
-  if (gps.location.lat() < 0)
-  {
-    sprintf(GPS1, "-%ld.%ld;", latE, latD);
-  }
-  else
-  {
-    sprintf(GPS1, "%ld.%ld;", latE, latD);
-  }
-
-  // Add longitude, altitude, and time measurements to the GPS2 string.
-  // A negative longitude measurement (west) will not show the sign by default.
-  // Therefore, it must be added manually.
-
-  if (gps.location.lng() < 0)
-  {
-    sprintf(GPS2, "-%ld.%ld;%d;%02d:%02d:%02d", lngE, lngD, alt, hora, min, seg);
-  }
-  else
-  {
-    sprintf(GPS2, "%ld.%ld;%d;%02d:%02d:%02d", lngE, lngD, alt, hora, min, seg);
-  }
-
-  // Add GPS1 and GPS2 strings to the SONDA string
-  
-  strcat(res, GPS1);
-  strcat(res, SEP);
-  strcat(res, GPS2);
   #endif
 
   // ADD CHECKSUM TO THE SONDA STRING
-  
-  unsigned int CHECKSUM = gps_CRC16_checksum(res); // Function for calculating the checksum for the SONDA string (defined later)
-  char VERIFICACIO[7]; // Define VERIFICACIO as a string
-  sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); // Structure the VERIFICACIO string
-  strcat(res, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
-  // SAVE SONDA STRING TO THE SD CARD
+  sprintf(buf, "*%04X\n", gps_CRC16_checksum(res));
+  strcat(res, buf);
 
+  // SAVE SONDA STRING TO THE SD CARD
   #if USE_SD
     SondaSD = SD.open("sonda.txt", FILE_WRITE);
     delay(500);
