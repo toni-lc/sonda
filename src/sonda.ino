@@ -23,12 +23,12 @@
 // "KitchenSink" example from the TinyGPS++ library. (GPS location)
 // -https://ukhas.org.uk/guides:linkingarduinotontx2 (radio transmission)
 
-#include <library_imports.h> // libraries
-
 // DEFINITIONS
 // We use these flags to include/exclude certain parts of the code, for example sensor reading
 // or measurement output. If the flag value is 0 the corresponding part will not execute
 // By default all flags are 1 so everything executes.
+
+#include <library_imports.h> // libraries
 
 #ifndef USE_DS
 #define USE_DS 1
@@ -57,6 +57,7 @@
 #ifndef TEST_RUN
 #define TEST_RUN 0
 #endif
+
 
 // SENSORS:
 
@@ -103,12 +104,10 @@ File SondaSD; // "SondaSD" object for the SD card file where data will be saved
 float tDS = 0; // External temperature (degrees Celsius)
 
 float tDHT = 0; // Internal temperature from the DHT sensor (degrees Celsius)
-int hDHT = 0; // Humidity (%)
+float hDHT = 0; // Humidity (%)
 
-int tBMP = 0; // Internal temperature from the BMP sensor (degrees Celsius)
-int pBMP = 0; // Pressure (mbar)
-int p0 = 0; // Pressure (relative, at sea level)
-int altBMP = 0; // Altitude (calculated by the BMP sensor)
+double tBMP; // Internal temperature from the BMP sensor (degrees Celsius)
+double pBMP; // Pressure (mbar)
 
 // GPS variables
 
@@ -128,13 +127,16 @@ int iter = 0; // measurement iteration
 
 // STRINGS:
 
+char buf[15]; // buffer to store each measure before adding to the final string
+char SEP[] = ";"; // separator between variables
+
 // Since the positive or negative sign cannot be added directly to the coordinates,
 // it will be stored in separate strings and then added to the final string,
 // which will be transmitted by radio and saved to the SD card.
 
 char GPS1[20];
 char GPS2[30];
-char SONDA [90]; // Final string
+char res[90]; // Final string
 
 void setup() { 
   
@@ -265,80 +267,58 @@ void loop() {
         //// default is 12 bit resolution, 750 ms conversion time
     }
     tDS = (float)raw / 16.0;
+    
+    // convert float to string and append to final string
+    // sprintf in Arduino does not support floats or doubles,
+    // it's either dtostrf or splitting each variable into integer and decimal part 
+    dtostrf(tDS, 2, 1, buf);
+    strcat(res, buf);
+    strcat(res, SEP);
 
   #endif
 
   //DHT
   #if USE_DHT  
-  tDHT = dht.readTemperature(); // Read internal temperature
-  hDHT = dht.readHumidity(); // Read the humidity value and name it "h"
+  tDHT = dht.readTemperature();
+  dtostrf(tDHT, 2, 1, buf);
+  strcat(res, buf);
+  strcat(res, SEP);
+
+  hDHT = dht.readHumidity(); 
+  dtostrf(hDHT, 2, 1, buf);
+  strcat(res, buf);
+  strcat(res, SEP);
   #endif
 
   //BMP180
   #if USE_BMP
-    char status; // Define status variable (returns 1 if there are no problems, 0 if there are)
-    double T,P;
-    
-    // T: define variable T (temperature in degrees C)
-    // P: define variable P (absolute pressure in mbar)
+    char status = pressio.startTemperature();
 
-    // Measure temperature.
-    
-    status = pressio.startTemperature();
-    if (status != 0) // If temperature can be measured...
-    {
-        // Wait until temperature measurement is complete
-        delay(status);
-
-        // Receive temperature measurement
-        // and save it to variable T
-
-        status = pressio.getTemperature(T);
-        if (status != 0) // If the measurement can be received...
+    if (status != 0) // status = 0 -> communication error; status != 0 -> delay (ms) needed to retrieve data 
+    {   // measure temperature
+        delay(status); 
+        status = pressio.getTemperature(tBMP); 
+        if (status != 0) // status = 0 -> error; status = 1 -> measure completed 
         {
-        // Measure pressure.
-        // The "3" indicates the resolution.
-        // It can be between 0 and 3. 0 is the lowest, 3 is the highest, but it takes longer.
+            dtostrf(tBMP, 2, 1, buf);
+            strcat(res, buf);
+            strcat(res, SEP);
 
-        status = pressio.startPressure(3);
-        if (status != 0) // If pressure can be measured...
+        status = pressio.startPressure(3); // pressure measurement depends on temperature measurement 
+        if (status != 0) 
         {
-            // Wait until pressure measurement is complete.
             delay(status);
-
-            // Receive pressure measurement
-            // and save it to variable P.
-            // This pressure is calibrated with temperature,
-            // so a previous temperature measurement is required.
-
-            status = pressio.getPressure(P,T);
-            if (status != 0) // If the measurement can be received...
-            {
-
-            // Get relative sea-level pressure
-            // from pressure and initial altitude
-            
-            p0 = pressio.sealevel(P,ALTITUD);
-
-            // Get altitude from the pressure difference.
-            // It is not fully reliable because temperature is not constant.
-            
-            altBMP = pressio.altitude(P,p0);
+            status = pressio.getPressure(pBMP, tBMP);
+            if (status != 0){
+                dtostrf(pBMP, 2, 1, buf);
+                strcat(res, buf);
+                strcat(res, SEP);
             }
-            else Serial.println(F("error rebent pressio\n"));
         }
-        else Serial.println(F("error mesurant pressio\n"));
+        else Serial.println(F("ERROR IN BMP PRESSURE\n"));
         }
-        else Serial.println(F("error rebent temperatura\n"));
     }
-    else Serial.println(F("error mesurant temperatura\n"));
-
-    // Convert temperature and pressure measurements into integers.
-    // The temperature measurement complements the DHT measurement.
-    // Pressure does not need one-decimal precision; an integer is enough.
-
-    tBMP = T;
-    pBMP = P;
+    else Serial.println(F("ERROR IN BMP TEMPERATURE\n"));
   #endif
 
   //GPS
@@ -388,8 +368,7 @@ void loop() {
   // STRUCTURE STRINGS
 
   // Add sensor measurements to the SONDA string
-
-  sprintf(SONDA, "%.2d;%.2d;%.2d;%d;%d;", tDS, tDHT, hDHT, tBMP, pBMP, altBMP);
+//   sprintf(SONDA, "%+.1f;%+.1f;%.1f;%+.1f;%d", tDS, tDHT, hDHT, tBMP, pBMP);
 
   // Add latitude measurement to the GPS1 string.
   // A negative latitude measurement (south) will not show the sign by default.
@@ -419,15 +398,16 @@ void loop() {
 
   // Add GPS1 and GPS2 strings to the SONDA string
   
-  strcat(SONDA, GPS1);
-  strcat(SONDA, GPS2);
+  strcat(res, GPS1);
+  strcat(res, SEP);
+  strcat(res, GPS2);
 
   // ADD CHECKSUM TO THE SONDA STRING
   
-  unsigned int CHECKSUM = gps_CRC16_checksum(SONDA); // Function for calculating the checksum for the SONDA string (defined later)
+  unsigned int CHECKSUM = gps_CRC16_checksum(res); // Function for calculating the checksum for the SONDA string (defined later)
   char VERIFICACIO[6]; // Define VERIFICACIO as a string
   sprintf(VERIFICACIO, "*%04X\n", CHECKSUM); // Structure the VERIFICACIO string
-  strcat(SONDA, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
+  strcat(res, VERIFICACIO); // Concatenate SONDA and VERIFICACIO strings (the second string is appended to the first)
 
   // SAVE SONDA STRING TO THE SD CARD
 
@@ -436,7 +416,7 @@ void loop() {
     delay(500);
 
     if (SondaSD){
-        SondaSD.println(SONDA);
+        SondaSD.println(res);
         SondaSD.close();
     }
     else{
@@ -447,14 +427,14 @@ void loop() {
   // TRANSMIT SONDA STRING BY RADIO
   
   #if USE_RADIO
-    rtty_txstring (SONDA); // Function for transmitting the final probe string by radio (defined later)
+    rtty_txstring (res); // Function for transmitting the final probe string by radio (defined later)
   #endif
   // END OF THE "LOOP" FUNCTION. START AGAIN.
   
     Serial.print("Iteration ");
     Serial.print(iter);
     Serial.print(" : ");
-    Serial.print(SONDA);
+    Serial.print(res);
     delay(2000);
 
 }
