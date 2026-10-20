@@ -101,15 +101,9 @@ File SondaSD; // "SondaSD" object for the SD card file where data will be saved
 // Sensor variables
 
 float tDS = 0; // External temperature (degrees Celsius)
-int tDSE = 0;  // External temperature (integer part)
-int tDSD = 0;  // External temperature (decimal part)
 
 float tDHT = 0; // Internal temperature from the DHT sensor (degrees Celsius)
-int tDHTE = 0;  // Internal temperature (integer part)
-int tDHTD = 0;  // Internal temperature (decimal part)
 int hDHT = 0; // Humidity (%)
-int hDHTE = 0;  // Humidity (integer part)
-int hDHTD = 0;  // Humidity (decimal part)
 
 int tBMP = 0; // Internal temperature from the BMP sensor (degrees Celsius)
 int pBMP = 0; // Pressure (mbar)
@@ -272,40 +266,12 @@ void loop() {
     }
     tDS = (float)raw / 16.0;
 
-    // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
-    // It is approximated to one decimal by truncation.
-    // The tDS value is split into tDSE (integer part) and tDSD (decimal part)
-    
-    tDSE = tDS;
-    float tDS2 = tDS - tDSE;
-    tDSD = trunc(tDS2*10);
   #endif
 
   //DHT
   #if USE_DHT  
-  // GET INTERNAL TEMPERATURE.
-
   tDHT = dht.readTemperature(); // Read internal temperature
-
-  // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
-  // It is approximated to one decimal by truncation.
-  // The tInt value is split into tIntE (integer part) and tIntD (decimal part)
-
-  tDHTE = tDHT;
-  float tDHT2 = tDHT - tDHTE;
-  tDHTD = trunc(tDHT2*10);
-
-  // GET HUMIDITY.
-     
   hDHT = dht.readHumidity(); // Read the humidity value and name it "h"
-
-  // Convert decimal value into two integers (E=integer part; 2=value minus integer part; D=decimal part)
-  // It is approximated to one decimal by truncation.
-  // The h value is split into hE (integer part) and hD (decimal part)
-  
-  hDHTE = hDHT;
-  float hDHT2 = hDHT - hDHTE;
-  hDHTD = trunc(hDHT2*10);
   #endif
 
   //BMP180
@@ -423,7 +389,7 @@ void loop() {
 
   // Add sensor measurements to the SONDA string
 
-  sprintf(SONDA, "%d,%d;%d,%d;%d,%d;%d;%d;%d;", tDSE, tDSD, tDHTE, tDHTD, hDHTE, hDHTD, tBMP, pBMP, altBMP);
+  sprintf(SONDA, "%.2d;%.2d;%.2d;%d;%d;", tDS, tDHT, hDHT, tBMP, pBMP, altBMP);
 
   // Add latitude measurement to the GPS1 string.
   // A negative latitude measurement (south) will not show the sign by default.
