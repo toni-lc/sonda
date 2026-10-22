@@ -82,7 +82,6 @@ DHT dht(DHTPIN, DHTTYPE); // "dht" object for the DHT sensor: a DHT22 connected 
 
 #if USE_BMP
 SFE_BMP180 pressio; // "pressio" object for the BMP180 sensor
-#define ALTITUD 330.0 // Altitude from which pressure measurement starts
 #endif
 
 // GPS locator:
