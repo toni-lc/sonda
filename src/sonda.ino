@@ -10,7 +10,7 @@
 // [X]EXTERNAL TEMPERATURE (DS18B20)
 // [X]INTERNAL TEMPERATURE (DHT22)
 // [X]HUMIDITY             (DHT22)
-// [X]PRESSURE             (BMP180) (+ temperature, + altitude)
+// [X]PRESSURE (in Pa)     (BMP180) (+ temperature, + altitude)
 // [X]GPS LOCATION         (u-blox MAX-M8C)
 //      [X]COORDINATES
 //      [X]ALTITUDE
@@ -84,9 +84,9 @@ float hDHT = 0;
 //BMP180:
 
 #if USE_BMP
-SFE_BMP180 BMP;
-double tBMP;
-double pBMP;
+Adafruit_BMP085 BMP;
+float tBMP;
+int32_t pBMP;
 #endif
 
 // GPS locator:
@@ -300,33 +300,15 @@ else {
 
   //BMP180
   #if USE_BMP
-    char status = BMP.startTemperature();
+    tBMP = BMP.readTemperature();
+    dtostrf(tBMP, 2, 1, buf);
+    strcat(res, buf);
+    strcat(res, SEP);
 
-    if (status != 0) // status = 0 -> communication error; status != 0 -> delay (ms) needed to retrieve data 
-    {   // measure temperature
-        delay(status); 
-        status = BMP.getTemperature(tBMP); 
-        if (status != 0) // status = 0 -> error; status = 1 -> measure completed 
-        {
-            dtostrf(tBMP, 2, 1, buf);
-            strcat(res, buf);
-            strcat(res, SEP);
-
-        status = BMP.startPressure(3); // pressure measurement depends on temperature measurement 
-        if (status != 0) 
-        {
-            delay(status);
-            status = BMP.getPressure(pBMP, tBMP);
-            if (status != 0){
-                dtostrf(pBMP, 2, 1, buf);
-                strcat(res, buf);
-                strcat(res, SEP);
-            }
-        }
-        else Serial.println(F("ERROR IN BMP PRESSURE\n"));
-        }
-    }
-    else Serial.println(F("ERROR IN BMP TEMPERATURE\n"));
+    pBMP = BMP.readPressure();
+    snprintf(buf, sizeof(buf), "%ld", (long)pBMP);
+    strcat(res, buf);
+    strcat(res, SEP);
   #endif
 
   //GPS

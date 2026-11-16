@@ -9,8 +9,7 @@
 #endif 
 
 #if USE_BMP
-#include <SFE_BMP180.h> // BMP180 sensor library
-#include <Wire.h> // I2C library, used by the BMP180 sensor
+#include <Adafruit_BMP085.h>
 #endif
 
 #if USE_GPS
