@@ -110,7 +110,8 @@ TinyGPSTime time;   // time (UTC)
 
 // other variables
 int iter = 0; // measurement iteration
-char buf[15]; // buffer to store each measure before adding to the final string
+char sbuf[7];  // short buffer for meteorological variables and altitude 
+char lbuf[15]; // long buffer for gps coordinates
 char SEP[] = ";"; // separator between variables
 char ERR[] = "NA"; // error value
 char res[90]; // Final string
@@ -233,12 +234,12 @@ void loop() {
     // convert float to string and append to final string
     // sprintf in Arduino does not support floats or doubles,
     // it's either dtostrf or splitting each variable into integer and decimal part 
-    dtostrf(tDS, 2, 1, buf);
+    dtostrf(tDS, 2, 1, sbuf);
 }
 else {
-    strcpy(buf, ERR);
+    strcpy(sbuf, ERR);
 }
-    strcat(res, buf);
+    strcat(res, sbuf);
     strcat(res, SEP);
 
   #endif
@@ -249,38 +250,43 @@ else {
   // temperature
   dht.temperature().getEvent(&event);
   if (isnan(event.temperature)) {
-    strcpy(buf, ERR);
+    strcpy(sbuf, ERR);
   }
   else {
     tDHT = event.temperature;
-    dtostrf(tDHT, 2, 1, buf);
+    if (isnan(tDHT)) {
+        strcpy(sbuf, ERR);
+    }
+    else {
+        dtostrf(tDHT, 2, 1, sbuf);
+    }
   }
-  strcat(res, buf);
+  strcat(res, sbuf);
   strcat(res, SEP);
 
   // humidity
   dht.humidity().getEvent(&event);
     if (isnan(event.relative_humidity)) {
-    strcpy(buf, ERR);
+    strcpy(sbuf, ERR);
   }
   else {
     hDHT = event.relative_humidity;
-    dtostrf(hDHT, 2, 1, buf);
+    dtostrf(hDHT, 2, 1, sbuf);
   }
-  strcat(res, buf);
+  strcat(res, sbuf);
   strcat(res, SEP);
   #endif
 
   //BMP180
   #if USE_BMP
     tBMP = BMP.readTemperature();
-    dtostrf(tBMP, 2, 1, buf);
-    strcat(res, buf);
+    dtostrf(tBMP, 2, 1, sbuf);
+    strcat(res, sbuf);
     strcat(res, SEP);
 
     pBMP = BMP.readPressure();
-    snprintf(buf, sizeof(buf), "%ld", (long)pBMP);
-    strcat(res, buf);
+    snprintf(sbuf, sizeof(sbuf), "%ld", (long)pBMP);
+    strcat(res, sbuf);
     strcat(res, SEP);
   #endif
 
@@ -302,59 +308,70 @@ else {
     } while (millis() - start < 3000);
 
     if (!gps.location.isValid()) {
-        snprintf(buf, sizeof(buf), "%s%s%s%s", ERR, SEP, ERR, SEP);
-        strcat(res, buf);
+        snprintf(lbuf, sizeof(lbuf), "%s%s%s", ERR, SEP, ERR);
+        strcat(res, lbuf);
     } else {
     // latitude
     raw_lat = gps.location.rawLat();
-    if (raw_lat.negative){
-        strcat(res, "-");
+    if (raw_lat.deg > 90){
+        strcat(res, ERR);
+        strcat(res, SEP);
     }
     else {
-        strcat(res, "+");
+        if (raw_lat.negative){
+            strcat(res, "-");
+        }
+        else {
+            strcat(res, "+");
+        }
+        sprintf(lbuf, "%u.%09lu",
+                (unsigned int)raw_lat.deg,
+                (unsigned long)raw_lat.billionths);
+        strcat(res, lbuf);
+        strcat(res, SEP);
     }
-    sprintf(buf, "%u.%09lu",
-            (unsigned int)raw_lat.deg,
-            (unsigned long)raw_lat.billionths);
-    strcat(res, buf);
-    strcat(res, SEP);
-
     // longitude
     raw_lng = gps.location.rawLng();
-    if (raw_lng.negative){
-        strcat(res, "-");
+    if (raw_lng.deg > 180){
+        strcat(res, ERR);
     }
     else {
-        strcat(res, "+");
+        if (raw_lng.negative){
+            strcat(res, "-");
+        }
+        else {
+            strcat(res, "+");
+        }
+        sprintf(lbuf, "%u.%09lu",
+                (unsigned int)raw_lng.deg,
+                (unsigned long)raw_lng.billionths);
+        strcat(res, lbuf);
+
+        }
     }
-    sprintf(buf, "%u.%09lu",
-            (unsigned int)raw_lng.deg,
-            (unsigned long)raw_lng.billionths);
-    strcat(res, buf);
     strcat(res, SEP);
-    }
 
     // Altitude
     
-    if (gps.altitude.isValid()){
+    if (gps.altitude.isValid() && gps.altitude.value() >= 0 && gps.altitude.value() < 1E8){
         altitude = gps.altitude.value() / 100;
-        snprintf(buf, sizeof(buf), "%ld", (long)altitude);
+        snprintf(sbuf, sizeof(sbuf), "%ld", (long)altitude);
     }
     else {
-        strcpy(buf, ERR);
+        strcpy(sbuf, ERR);
     }
-    strcat(res, buf);
+    strcat(res, sbuf);
     strcat(res, SEP);
 
     // Time (UTC)
     time = gps.time;
     if (!time.isValid()){
-        strcpy(buf, ERR);
-        strcat(buf, SEP);
-        strcat(res, buf);
+        strcpy(lbuf, ERR);
+        strcat(res, lbuf);
+        strcat(res, SEP);
     } else {
-    sprintf(buf, "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
-    strcat(res, buf);
+    sprintf(lbuf, "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
+    strcat(res, lbuf);
     }
 
     ss.end(); // end communication with GPS to not interfere with radio tx
@@ -362,8 +379,8 @@ else {
   #endif
 
   // ADD CHECKSUM TO THE SONDA STRING
-  sprintf(buf, "*%04X\n", gps_CRC16_checksum(res));
-  strcat(res, buf);
+//   sprintf(sbuf, "*%04X\n", gps_CRC16_checksum(res));
+//   strcat(res, sbuf);
 
   // TRANSMIT SONDA STRING BY RADIO
   
@@ -445,21 +462,21 @@ void rtty_txbit (int pin, int bit) {
     // See : http://arduino.cc/en/Reference/DelayMicroseconds
 }
  
-uint16_t gps_CRC16_checksum (char *string) {
-    size_t i;
-    uint16_t crc;
-    uint8_t c;
+// uint16_t gps_CRC16_checksum (char *string) {
+//     size_t i;
+//     uint16_t crc;
+//     uint8_t c;
  
-    crc = 0xFFFF;
+//     crc = 0xFFFF;
  
-    // Calculate checksum ignoring the first two $s
-    for (i = 2; i < strlen(string); i++) {
-        c = string[i];
-        crc = _crc_xmodem_update (crc, c);
-    }
+//     // Calculate checksum ignoring the first two $s
+//     for (i = 2; i < strlen(string); i++) {
+//         c = string[i];
+//         crc = _crc_xmodem_update (crc, c);
+//     }
  
-    return crc;
-}
+//     return crc;
+// }
  
 void setPwmFrequency(int pin, int divisor) {
     byte mode;
