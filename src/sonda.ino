@@ -131,7 +131,7 @@ void setup() {
     pinMode(RADIOPIN,OUTPUT);
     setPwmFrequency(RADIOPIN, 1);
   #endif
-  
+
   // START DHT22 SENSOR
 
   #if USE_DHT
@@ -162,7 +162,6 @@ void loop() {
         // enters infinite loop, does not measure again
         // this is the closest we have to "stopping the program"
         while (true) {
-            delay(1000);
         }
     }
     #endif
@@ -265,8 +264,8 @@ else {
     strcpy(buf, ERR);
   }
   else {
-    tDHT = event.relative_humidity;
-    dtostrf(tDHT, 2, 1, buf);
+    hDHT = event.relative_humidity;
+    dtostrf(hDHT, 2, 1, buf);
   }
   strcat(res, buf);
   strcat(res, SEP);
