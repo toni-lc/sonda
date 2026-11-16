@@ -5,7 +5,7 @@
 // Then it will package these values into a string
 // that will be transmitted by radio.
 // The string is structured as follows:
-// External temperature; internal temperature; humidity; BMP temperature; pressure; BMP altitude; latitude; longitude; altitude; time; checksum.
+// External temperature; internal temperature; humidity; BMP temperature; pressure; latitude; longitude; altitude; time.
 // 
 // [X]EXTERNAL TEMPERATURE (DS18B20)
 // [X]INTERNAL TEMPERATURE (DHT22)
@@ -378,20 +378,16 @@ else {
 
   #endif
 
-  // ADD CHECKSUM TO THE SONDA STRING
-//   sprintf(sbuf, "*%04X\n", gps_CRC16_checksum(res));
-//   strcat(res, sbuf);
-
   // TRANSMIT SONDA STRING BY RADIO
   
   #if USE_RADIO
     rtty_txstring (RADIOPIN, res); 
   #endif
   
-    Serial.println("Iteration ");
+    Serial.print("Iteration ");
     Serial.print(iter);
     Serial.print(" : ");
-    Serial.print(res);
+    Serial.println(res);
 
     // clean final string
     res[0] = '\0';
@@ -461,22 +457,6 @@ void rtty_txbit (int pin, int bit) {
     // largest value that will produce an accurate delay is 16383
     // See : http://arduino.cc/en/Reference/DelayMicroseconds
 }
- 
-// uint16_t gps_CRC16_checksum (char *string) {
-//     size_t i;
-//     uint16_t crc;
-//     uint8_t c;
- 
-//     crc = 0xFFFF;
- 
-//     // Calculate checksum ignoring the first two $s
-//     for (i = 2; i < strlen(string); i++) {
-//         c = string[i];
-//         crc = _crc_xmodem_update (crc, c);
-//     }
- 
-//     return crc;
-// }
  
 void setPwmFrequency(int pin, int divisor) {
     byte mode;

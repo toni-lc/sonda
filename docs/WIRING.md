@@ -1,6 +1,6 @@
 # Wiring
 
-This document describes the wiring used by the original `sonda.ino` firmware **in an Arduino Uno (or compatible) board**.
+This document describes the wiring used by the current `sonda.ino` firmware **in an Arduino Uno (or compatible) board**.
 
 ## Pin Table
 
@@ -19,12 +19,6 @@ This document describes the wiring used by the original `sonda.ino` firmware **i
 | u-blox MAX-M8C | `VCC` | 3.3V |
 | u-blox MAX-M8C | `GND` | GND |
 | u-blox MAX-M8C | `TXD` | Digital pin `4` |
-| microSD module | `CS` | Digital pin `10` |
-| microSD module | `SCK` | Digital pin `13` |
-| microSD module | `MOSI` | Digital pin `11` |
-| microSD module | `MISO` | Digital pin `12` |
-| microSD module | `VCC` | 5V |
-| microSD module | `GND` | GND |
 | Radiometrix NTX2B | Pin `4` | 3.3V |
 | Radiometrix NTX2B | Pin `5` | 3.3V |
 | Radiometrix NTX2B | Pin `6` | GND |
