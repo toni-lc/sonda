@@ -3,7 +3,9 @@
 #endif
 
 #if USE_DHT
-#include "DHT.h" // DHT sensor library
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
 #endif 
 
 #if USE_BMP

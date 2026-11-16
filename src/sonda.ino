@@ -76,7 +76,7 @@ float tDS = 0;
 #if USE_DHT
 #define DHTPIN 2 // connected to the out pin in the DHT sensor
 #define DHTTYPE DHT22 // The DHT sensor is a DHT22
-DHT dht(DHTPIN, DHTTYPE);
+DHT_Unified dht(DHTPIN, DHTTYPE);
 float tDHT = 0; 
 float hDHT = 0; 
 #endif
@@ -272,13 +272,28 @@ else {
 
   //DHT
   #if USE_DHT  
-  tDHT = dht.readTemperature();
-  dtostrf(tDHT, 2, 1, buf);
+  sensors_event_t event;
+  // temperature
+  dht.temperature().getEvent(&event);
+  if (isnan(event.temperature)) {
+    strcpy(buf, "ERR");
+  }
+  else {
+    tDHT = event.temperature;
+    dtostrf(tDHT, 2, 1, buf);
+  }
   strcat(res, buf);
   strcat(res, SEP);
 
-  hDHT = dht.readHumidity(); 
-  dtostrf(hDHT, 2, 1, buf);
+  // humidity
+  dht.humidity().getEvent(&event);
+    if (isnan(event.relative_humidity)) {
+    strcpy(buf, "ERR");
+  }
+  else {
+    tDHT = event.relative_humidity;
+    dtostrf(tDHT, 2, 1, buf);
+  }
   strcat(res, buf);
   strcat(res, SEP);
   #endif
