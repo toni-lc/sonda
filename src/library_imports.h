@@ -16,5 +16,3 @@
 #include <TinyGPS++.h> // Library for parsing GPS data
 #include <SoftwareSerial.h> // Library for communication between the GPS and the Arduino
 #endif
-
-#include <util/crc16.h> // Library for calculating checksums

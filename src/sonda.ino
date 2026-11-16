@@ -388,7 +388,7 @@ else {
     rtty_txstring (RADIOPIN, res); 
   #endif
   
-    Serial.print("Iteration ");
+    Serial.println("Iteration ");
     Serial.print(iter);
     Serial.print(" : ");
     Serial.print(res);
