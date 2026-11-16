@@ -65,23 +65,28 @@
 //DS18B20:
 
 #if USE_DS
-OneWire ds(8); // The DS sensor is connected to digital pin 8
+#define DS_DATA_PIN 8 // connected to the DS18B20 data wire 
+OneWire ds(DS_DATA_PIN);
 byte type_s = 0; // for DS18S20 change to 1
+float tDS = 0;
 #endif
 
 //DHT22:
 
 #if USE_DHT
-#define DHTPIN 2 // The DHT sensor is connected to digital pin 2
+#define DHTPIN 2 // connected to the out pin in the DHT sensor
 #define DHTTYPE DHT22 // The DHT sensor is a DHT22
-
-DHT dht(DHTPIN, DHTTYPE); // "dht" object for the DHT sensor: a DHT22 connected to digital pin 2
+DHT dht(DHTPIN, DHTTYPE);
+float tDHT = 0; 
+float hDHT = 0; 
 #endif
 
 //BMP180:
 
 #if USE_BMP
-SFE_BMP180 pressio; // "pressio" object for the BMP180 sensor
+SFE_BMP180 BMP;
+double tBMP;
+double pBMP;
 #endif
 
 // GPS locator:
@@ -91,7 +96,9 @@ TinyGPSPlus gps; // "gps" object for the GPS locator
 
 // The GPS communicates with the Arduino board
 // through a software serial port (in this case, pins 4 and 3).
-SoftwareSerial ss(4, 3); // "ss" object for the software serial port
+#define GPS_TX_PIN 4 // connected to the TXD pin in the GPS
+#define GPS_RX_PIN 3 // connected to the RXD pin in the GPS
+SoftwareSerial ss(GPS_TX_PIN, GPS_RX_PIN);
 
 RawDegrees raw_lat; // latitude (degrees)
 RawDegrees raw_lng; // longitude (degrees)
@@ -101,8 +108,8 @@ TinyGPSTime time;   // time (UTC)
 
 // SD card:
 #if USE_SD
-#define TARGETA 10 // SD card pin (module CS pin) connected to Arduino digital pin 10
-File SondaSD; // "SondaSD" object for the SD card file where data will be saved
+#define SD_CS_PIN 10 // SD card pin (module CS pin) connected to Arduino digital pin 10
+File SDCard; // "SDCard" object for the SD card file where data will be saved
 #endif
 
 //Radiometrix NTX2B-FA:
@@ -111,34 +118,10 @@ File SondaSD; // "SondaSD" object for the SD card file where data will be saved
 #define RADIOPIN 9 // Transmission pin (transmitter pin 7) connected to Arduino digital pin 9
 #endif
 
-// VARIABLES:
-
-// float=decimal number; int=integer (2 bytes); long=integer (4 bytes); char=string
-
-// Sensor variables
-
-float tDS = 0; // External temperature (degrees Celsius)
-
-float tDHT = 0; // Internal temperature from the DHT sensor (degrees Celsius)
-float hDHT = 0; // Humidity (%)
-
-double tBMP; // Internal temperature from the BMP sensor (degrees Celsius)
-double pBMP; // Pressure (mbar)
-
-// GPS variables
-
-
+// other variables
 int iter = 0; // measurement iteration
-
-// STRINGS:
-
 char buf[15]; // buffer to store each measure before adding to the final string
 char SEP[] = ";"; // separator between variables
-
-// Since the positive or negative sign cannot be added directly to the coordinates,
-// it will be stored in separate strings and then added to the final string,
-// which will be transmitted by radio and saved to the SD card.
-
 char res[90]; // Final string
 
 void setup() { 
@@ -157,7 +140,7 @@ void setup() {
 
   #if USE_SD
     Serial.println(F("Preparant SD"));
-    pinMode(TARGETA,OUTPUT);
+    pinMode(SD_CS_PIN, OUTPUT);
 
     // Start SD card communication.
     // If communication cannot be established now, data cannot be saved during the flight.
@@ -186,7 +169,7 @@ void setup() {
   // START BMP180 SENSOR
   
   #if USE_BMP
-    if (pressio.begin()) { // If the sensor starts,
+    if (BMP.begin()) { // If the sensor starts,
         Serial.println(F("BMP OK"));
     }
     else{ // If it does not start,
@@ -302,23 +285,23 @@ else {
 
   //BMP180
   #if USE_BMP
-    char status = pressio.startTemperature();
+    char status = BMP.startTemperature();
 
     if (status != 0) // status = 0 -> communication error; status != 0 -> delay (ms) needed to retrieve data 
     {   // measure temperature
         delay(status); 
-        status = pressio.getTemperature(tBMP); 
+        status = BMP.getTemperature(tBMP); 
         if (status != 0) // status = 0 -> error; status = 1 -> measure completed 
         {
             dtostrf(tBMP, 2, 1, buf);
             strcat(res, buf);
             strcat(res, SEP);
 
-        status = pressio.startPressure(3); // pressure measurement depends on temperature measurement 
+        status = BMP.startPressure(3); // pressure measurement depends on temperature measurement 
         if (status != 0) 
         {
             delay(status);
-            status = pressio.getPressure(pBMP, tBMP);
+            status = BMP.getPressure(pBMP, tBMP);
             if (status != 0){
                 dtostrf(pBMP, 2, 1, buf);
                 strcat(res, buf);
@@ -416,12 +399,12 @@ else {
 
   // SAVE SONDA STRING TO THE SD CARD
   #if USE_SD
-    SondaSD = SD.open("sonda.txt", FILE_WRITE);
+    SDCard = SD.open("sonda.txt", FILE_WRITE);
     delay(500);
 
-    if (SondaSD){
-        SondaSD.println(res);
-        SondaSD.close();
+    if (SDCard){
+        SDCard.println(res);
+        SDCard.close();
     }
     else{
         Serial.println("error obrint sonda.txt");
