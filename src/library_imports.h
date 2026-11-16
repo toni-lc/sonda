@@ -17,9 +17,4 @@
 #include <SoftwareSerial.h> // Library for communication between the GPS and the Arduino
 #endif
 
-#if USE_SD
-#include <SD.h> // Library for using the SD card
-#include <SPI.h> // Library for communication with the SD card
-#endif
-
 #include <util/crc16.h> // Library for calculating checksums

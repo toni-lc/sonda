@@ -3,7 +3,7 @@
 // It will measure internal and external temperature, humidity, pressure,
 // position, altitude, and time.
 // Then it will package these values into a string
-// that will be saved to an SD card and transmitted by radio.
+// that will be transmitted by radio.
 // The string is structured as follows:
 // External temperature; internal temperature; humidity; BMP temperature; pressure; BMP altitude; latitude; longitude; altitude; time; checksum.
 // 
@@ -15,7 +15,6 @@
 //      [X]COORDINATES
 //      [X]ALTITUDE
 //      [X]DATE AND TIME
-// [X]SD STORAGE           (Catalex MicroSD Card Adapter)
 // [X]RADIO TRANSMISSION   (Radiometrix NTX2B-FA)
 //
 // Sources: Parts of the code are taken directly from:
@@ -44,10 +43,6 @@
 
 #ifndef USE_GPS
 #define USE_GPS 1
-#endif
-
-#ifndef USE_SD
-#define USE_SD 1
 #endif
 
 #ifndef USE_RADIO
@@ -102,14 +97,9 @@ SoftwareSerial ss(GPS_TX_PIN, GPS_RX_PIN);
 
 RawDegrees raw_lat; // latitude (degrees)
 RawDegrees raw_lng; // longitude (degrees)
+int32_t altitude;   // altitude (meters)
 TinyGPSTime time;   // time (UTC)
 
-#endif
-
-// SD card:
-#if USE_SD
-#define SD_CS_PIN 10 // SD card pin (module CS pin) connected to Arduino digital pin 10
-File SDCard; // "SDCard" object for the SD card file where data will be saved
 #endif
 
 //Radiometrix NTX2B-FA:
@@ -122,6 +112,7 @@ File SDCard; // "SDCard" object for the SD card file where data will be saved
 int iter = 0; // measurement iteration
 char buf[15]; // buffer to store each measure before adding to the final string
 char SEP[] = ";"; // separator between variables
+char ERR[] = "NA"; // error value
 char res[90]; // Final string
 
 void setup() { 
@@ -133,25 +124,6 @@ void setup() {
   // Serial port communication is only used for pre-flight setup.
 
   Serial.begin(38400); // Open serial port communication
-
-  // OPEN SD CARD COMMUNICATION
-
-  // Prepare SD card communication
-
-  #if USE_SD
-    Serial.println(F("Preparant SD"));
-    pinMode(SD_CS_PIN, OUTPUT);
-
-    // Start SD card communication.
-    // If communication cannot be established now, data cannot be saved during the flight.
-
-    if(!SD.begin(10)){
-        Serial.println(F("ERROR SD")); 
-    }
-    else{
-    Serial.println(F("SD OK"));
-    }
-   #endif
 
 //   // PREPARE RADIO COMMUNICATION
 
@@ -263,7 +235,7 @@ void loop() {
     dtostrf(tDS, 2, 1, buf);
 }
 else {
-    strcpy(buf, "ERR");
+    strcpy(buf, ERR);
 }
     strcat(res, buf);
     strcat(res, SEP);
@@ -276,7 +248,7 @@ else {
   // temperature
   dht.temperature().getEvent(&event);
   if (isnan(event.temperature)) {
-    strcpy(buf, "ERR");
+    strcpy(buf, ERR);
   }
   else {
     tDHT = event.temperature;
@@ -288,7 +260,7 @@ else {
   // humidity
   dht.humidity().getEvent(&event);
     if (isnan(event.relative_humidity)) {
-    strcpy(buf, "ERR");
+    strcpy(buf, ERR);
   }
   else {
     tDHT = event.relative_humidity;
@@ -329,7 +301,7 @@ else {
     } while (millis() - start < 3000);
 
     if (!gps.location.isValid()) {
-        strcpy(buf, "ERR;ERR;");
+        snprintf(buf, sizeof(buf), "%s%s%s%s", ERR, SEP, ERR, SEP);
         strcat(res, buf);
     } else {
     // latitude
@@ -364,10 +336,11 @@ else {
     // Altitude
     
     if (gps.altitude.isValid()){
-        utoa(buf, (int)gps.altitude.meters(), 10);
+        altitude = gps.altitude.value() / 100;
+        snprintf(buf, sizeof(buf), "%ld", (long)altitude);
     }
     else {
-        strcpy(buf, "ERR");
+        strcpy(buf, ERR);
     }
     strcat(res, buf);
     strcat(res, SEP);
@@ -375,7 +348,8 @@ else {
     // Time (UTC)
     time = gps.time;
     if (!time.isValid()){
-        strcpy(buf, "ERR;");
+        strcpy(buf, ERR);
+        strcat(buf, SEP);
         strcat(res, buf);
     } else {
     sprintf(buf, "%02d:%02d:%02d", time.hour(), time.minute(), time.second());
@@ -393,20 +367,6 @@ else {
   // ADD CHECKSUM TO THE SONDA STRING
   sprintf(buf, "*%04X\n", gps_CRC16_checksum(res));
   strcat(res, buf);
-
-  // SAVE SONDA STRING TO THE SD CARD
-  #if USE_SD
-    SDCard = SD.open("sonda.txt", FILE_WRITE);
-    delay(500);
-
-    if (SDCard){
-        SDCard.println(res);
-        SDCard.close();
-    }
-    else{
-        Serial.println("error obrint sonda.txt");
-    }
-  #endif
 
   // TRANSMIT SONDA STRING BY RADIO
   
