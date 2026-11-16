@@ -356,11 +356,7 @@ else {
     strcat(res, buf);
     }
 
-    // End communication with the GPS.
-    // VERY IMPORTANT: DO NOT SKIP THIS STEP,
-    // OR THE RADIO WILL NOT TRANSMIT PROPERLY!
-
-    ss.end();
+    ss.end(); // end communication with GPS to not interfere with radio tx
 
   #endif
 
@@ -371,9 +367,8 @@ else {
   // TRANSMIT SONDA STRING BY RADIO
   
   #if USE_RADIO
-    rtty_txstring (RADIOPIN, res); // Function for transmitting the final probe string by radio (defined later)
+    rtty_txstring (RADIOPIN, res); 
   #endif
-  // END OF THE "LOOP" FUNCTION. START AGAIN.
   
     Serial.print("Iteration ");
     Serial.print(iter);
