@@ -131,6 +131,7 @@ void setup() {
     pinMode(RADIOPIN,OUTPUT);
     setPwmFrequency(RADIOPIN, 1);
   #endif
+  
   // START DHT22 SENSOR
 
   #if USE_DHT
@@ -141,11 +142,12 @@ void setup() {
   // START BMP180 SENSOR
   
   #if USE_BMP
-    if (BMP.begin()) { // If the sensor starts,
+    if (BMP.begin()) { 
         Serial.println(F("BMP OK"));
     }
-    else{ // If it does not start,
+    else{ 
         Serial.println(F("BMP ERROR"));
+        while (true) {}
     }
   #endif
 
